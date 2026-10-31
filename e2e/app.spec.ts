@@ -417,6 +417,40 @@ test.describe("descriptions and navigation", () => {
   });
 });
 
+test.describe("phone login", () => {
+  test.use({ viewport: { width: 360, height: 420 }, hasTouch: true, isMobile: true });
+
+  test("the first screen after login is at the top with nothing focused to scroll to", async ({ page }) => {
+    await setup(page, { session: null });
+    await page.goto("/");
+    await page.getByLabel("Email").fill("me@example.com");
+    await page.getByLabel("Password").fill("correct-horse");
+    await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+    expect(await page.evaluate(() => window.scrollY)).toBeGreaterThan(0);
+    await page.getByRole("button", { name: "Sign in" }).click();
+    await expect(page.getByTestId("title-card")).toHaveCount(8);
+    expect(await page.evaluate(() => window.scrollY)).toBe(0);
+    await expect(page.getByRole("searchbox")).not.toBeFocused();
+  });
+
+  test("no form control is small enough to trigger iOS focus zoom", async ({ page }) => {
+    const sizes = () =>
+      page.locator("input, select").evaluateAll((els) => els.map((e) => parseFloat(getComputedStyle(e).fontSize)));
+    await setup(page, { session: null });
+    await page.goto("/");
+    await expect(page.getByLabel("Password")).toBeVisible();
+    for (const size of await sizes()) expect(size).toBeGreaterThanOrEqual(16);
+
+    await page.getByLabel("Email").fill("me@example.com");
+    await page.getByLabel("Password").fill("correct-horse");
+    await page.getByRole("button", { name: "Sign in" }).click();
+    await expect(page.getByTestId("title-card")).toHaveCount(8);
+    const home = await sizes();
+    expect(home.length).toBeGreaterThanOrEqual(2);
+    for (const size of home) expect(size).toBeGreaterThanOrEqual(16);
+  });
+});
+
 test.describe("mobile 360px", () => {
   test.use({ viewport: { width: 360, height: 740 } });
 

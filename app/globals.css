@@ -23,6 +23,12 @@
     background-attachment: fixed;
   }
 
+  /* iOS Safari zooms in on focus below 16px and never zooms back out. */
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
   :focus-visible {
     outline: 2px solid #38bdf8;
     outline-offset: 2px;

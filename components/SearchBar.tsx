@@ -20,7 +20,8 @@ export default function SearchBar({
   const ref = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (autoFocus) ref.current?.focus();
+    // Skipped on touch screens, where focusing can open the keyboard and shift the page.
+    if (autoFocus && !window.matchMedia("(pointer: coarse)").matches) ref.current?.focus({ preventScroll: true });
   }, [autoFocus]);
 
   useEffect(() => {
@@ -60,7 +61,7 @@ export default function SearchBar({
         onChange={(e) => onChange(e.target.value)}
         maxLength={100}
         autoComplete="off"
-        className={`glass w-full rounded-full text-white placeholder:text-white/40 focus:border-sky-400/60 focus:shadow-glow focus:outline-none [&::-webkit-search-cancel-button]:hidden ${
+        className={`glass w-full rounded-full text-white placeholder:text-white/40 focus:border-sky-400/60 focus:shadow-glow-soft focus:outline-none [&::-webkit-search-cancel-button]:hidden ${
           large ? "py-4 pl-14 pr-12 text-lg shadow-card" : "py-3 pl-12 pr-10 text-base"
         }`}
       />
