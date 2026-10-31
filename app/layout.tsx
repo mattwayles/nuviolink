@@ -5,6 +5,7 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: { default: "NuvioLink", template: "%s | NuvioLink" },
   description: "View and manage the watchlists of every profile on your Nuvio account.",
+  appleWebApp: { capable: true, title: "NuvioLink", statusBarStyle: "black" },
 };
 
 export const viewport: Viewport = { width: "device-width", initialScale: 1, themeColor: "#07080c" };

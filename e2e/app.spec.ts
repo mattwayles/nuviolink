@@ -271,7 +271,7 @@ test.describe("watchlists", () => {
     await card(page, /Breaking Bad/).click();
     const dialog = page.getByRole("dialog");
     await expect(dialog).toContainText('Remove "Breaking Bad" from Matt Watchlist?');
-    await dialog.getByRole("button", { name: "Cancel" }).click();
+    await dialog.getByRole("button", { name: "Close dialog" }).click();
     await expect(dialog).toHaveCount(0);
     expect(m.rpc("sync_delete_library_items")).toHaveLength(0);
 
@@ -302,6 +302,22 @@ test.describe("watchlists", () => {
   });
 });
 
+test("home screen installs as NuvioLink with an app icon", async ({ page, request }) => {
+  await setup(page);
+  await page.goto("/");
+  await expect(page).toHaveTitle("NuvioLink");
+  await expect(page.locator('meta[name="apple-mobile-web-app-title"]')).toHaveAttribute("content", "NuvioLink");
+  const href = (name: string) => page.locator(`link[rel="${name}"]`).first().getAttribute("href");
+  const manifest = await (await request.get((await href("manifest"))!)).json();
+  expect(manifest.short_name).toBe("NuvioLink");
+  const paths = [(await href("apple-touch-icon"))!, ...manifest.icons.map((i: { src: string }) => i.src)];
+  for (const path of paths) {
+    const res = await request.get(path);
+    expect(res.status()).toBe(200);
+    expect(res.headers()["content-type"]).toContain("image/png");
+  }
+});
+
 test.describe("descriptions and navigation", () => {
   test("add menu shows the title's description", async ({ page }) => {
     await setup(page);
@@ -323,7 +339,7 @@ test.describe("descriptions and navigation", () => {
     await page.goto("/watchlist/0");
     await card(page, /Breaking Bad/).click();
     await expect(page.getByRole("dialog")).toContainText("Breaking Bad overview");
-    await page.getByRole("dialog").getByRole("button", { name: "Cancel" }).click();
+    await page.getByRole("dialog").getByRole("button", { name: "Close dialog" }).click();
     await card(page, /Odd Addon Show/).click();
     await expect(page.getByRole("dialog")).toContainText("No description available.");
   });

@@ -20,12 +20,20 @@ export default function ConfirmDialog({
   return (
     <Overlay label={message} onClose={() => !busy && onCancel()}>
       <div className="p-4">
-        <p className="font-display text-lg leading-snug">{message}</p>
-        {children && <div className="mt-3">{children}</div>}
-        <div className="mt-5 flex justify-end gap-2">
-          <button type="button" className="btn-ghost" onClick={onCancel} disabled={busy}>
-            Cancel
+        <div className="flex items-start justify-between gap-3">
+          <p className="min-w-0 font-display text-lg leading-snug">{message}</p>
+          <button
+            type="button"
+            aria-label="Close dialog"
+            onClick={onCancel}
+            disabled={busy}
+            className="rounded-full px-2 text-2xl leading-none text-white/50 hover:text-white disabled:opacity-60"
+          >
+            ×
           </button>
+        </div>
+        {children && <div className="mt-3">{children}</div>}
+        <div className="mt-5 flex justify-end">
           <button
             type="button"
             onClick={onConfirm}
