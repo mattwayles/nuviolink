@@ -4,6 +4,12 @@ export function formatRating(r: number | null | undefined): string {
   return r && r > 0 ? r.toFixed(1) : "NR";
 }
 
+/** Dialog synopsis: undefined while loading, null when there is none. */
+export function TitleDescription({ text }: { text: string | null | undefined }) {
+  if (text === undefined) return <p className="text-sm text-white/50">Loading description…</p>;
+  return <p className="whitespace-pre-line text-sm leading-relaxed text-white/70">{text || "No description available."}</p>;
+}
+
 export function CardSkeleton() {
   return (
     <div aria-hidden="true" className="animate-pulse-glow">
@@ -53,7 +59,7 @@ export default function TitleCard({
           <img src={posterUrl} alt="" loading="lazy" className="h-full w-full object-cover" />
         ) : (
           <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-ink-700 to-ink-900 p-3">
-            <span className="line-clamp-4 text-center font-display text-lg font-bold text-white/30">{title}</span>
+            <span className="line-clamp-4 text-center font-display text-sm font-bold text-white/30 sm:text-lg">{title}</span>
           </div>
         )}
         <div className="pointer-events-none absolute inset-x-0 bottom-0 h-1/3 bg-gradient-to-t from-black/70 to-transparent" />

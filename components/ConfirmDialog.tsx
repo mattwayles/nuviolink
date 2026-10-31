@@ -8,17 +8,20 @@ export default function ConfirmDialog({
   busy,
   onConfirm,
   onCancel,
+  children,
 }: {
   message: string;
   confirmLabel: string;
   busy: boolean;
   onConfirm: () => void;
   onCancel: () => void;
+  children?: React.ReactNode;
 }) {
   return (
     <Overlay label={message} onClose={() => !busy && onCancel()}>
       <div className="p-4">
         <p className="font-display text-lg leading-snug">{message}</p>
+        {children && <div className="mt-3">{children}</div>}
         <div className="mt-5 flex justify-end gap-2">
           <button type="button" className="btn-ghost" onClick={onCancel} disabled={busy}>
             Cancel

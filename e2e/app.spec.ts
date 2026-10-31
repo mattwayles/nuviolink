@@ -302,8 +302,63 @@ test.describe("watchlists", () => {
   });
 });
 
+test.describe("descriptions and navigation", () => {
+  test("add menu shows the title's description", async ({ page }) => {
+    await setup(page);
+    await page.goto("/");
+    await card(page, /Inception/).click();
+    await expect(page.getByRole("dialog")).toContainText("Inception overview");
+  });
+
+  test("remove dialog shows the stored description", async ({ page }) => {
+    const library = { 0: [{ content_id: "tt1375666", content_type: "movie", name: "Inception", description: "Stored synopsis", added_at: 1 }] };
+    await setup(page, { library });
+    await page.goto("/watchlist/0");
+    await card(page, /Inception/).click();
+    await expect(page.getByRole("dialog")).toContainText("Stored synopsis");
+  });
+
+  test("remove dialog falls back to TMDB, then to a no-description message", async ({ page }) => {
+    await setup(page);
+    await page.goto("/watchlist/0");
+    await card(page, /Breaking Bad/).click();
+    await expect(page.getByRole("dialog")).toContainText("Breaking Bad overview");
+    await page.getByRole("dialog").getByRole("button", { name: "Cancel" }).click();
+    await card(page, /Odd Addon Show/).click();
+    await expect(page.getByRole("dialog")).toContainText("No description available.");
+  });
+
+  test("back button returns home from a watchlist and from an unknown profile", async ({ page }) => {
+    await setup(page);
+    for (const path of ["/watchlist/0", "/watchlist/42"]) {
+      await page.goto(path);
+      await page.getByRole("link", { name: "Back to home" }).click();
+      await expect(page).toHaveURL(/\/$/);
+      await expect(page.getByRole("searchbox", { name: "Search movies and TV shows" })).toBeVisible();
+    }
+  });
+
+  test("the add menu stays on screen on a short desktop window", async ({ page }) => {
+    await setup(page);
+    await page.setViewportSize({ width: 1280, height: 620 });
+    await page.goto("/");
+    await card(page, /Inception/).click();
+    const box = (await page.getByRole("dialog").boundingBox())!;
+    expect(box.y).toBeGreaterThanOrEqual(0);
+    expect(box.y + box.height).toBeLessThanOrEqual(620);
+  });
+});
+
 test.describe("mobile 360px", () => {
   test.use({ viewport: { width: 360, height: 740 } });
+
+  test("fits three posters per row", async ({ page }) => {
+    await setup(page);
+    await page.goto("/");
+    await expect(page.getByTestId("title-card")).toHaveCount(8);
+    const tops = await page.getByTestId("title-card").evaluateAll((els) => els.map((e) => e.getBoundingClientRect().top));
+    expect(tops.filter((t) => t === tops[0])).toHaveLength(3);
+  });
 
   test("no horizontal overflow on landing, menu sheet and watchlist", async ({ page }) => {
     await setup(page);

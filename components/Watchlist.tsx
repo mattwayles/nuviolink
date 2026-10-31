@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { addToLibrary, getCachedLibrary, getLibrary, removeFromLibrary } from "@/lib/nuvio/client";
@@ -11,7 +12,7 @@ import ConfirmDialog from "./ConfirmDialog";
 import { useProfiles } from "./Profiles";
 import SearchBar from "./SearchBar";
 import SortControl, { useSort } from "./SortControl";
-import TitleCard, { SkeletonGrid } from "./TitleCard";
+import TitleCard, { SkeletonGrid, TitleDescription } from "./TitleCard";
 import { useToast } from "./Toast";
 
 const keyOf = (i: LibraryItem) => `${i.content_type}:${i.content_id}`;
@@ -64,6 +65,14 @@ function norm(s: string): string {
   return s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
 }
 
+function BackHome() {
+  return (
+    <Link href="/" className="btn-ghost inline-flex items-center gap-2 py-1.5">
+      <span aria-hidden="true">←</span> Back to home
+    </Link>
+  );
+}
+
 export default function Watchlist() {
   const params = useParams<{ index: string }>();
   const raw = params.index;
@@ -79,6 +88,7 @@ export default function Watchlist() {
   const [sort, setSort] = useSort("nuviolink.sort.watchlist");
   const [target, setTarget] = useState<LibraryItem | null>(null);
   const [removing, setRemoving] = useState(false);
+  const [description, setDescription] = useState<string | null | undefined>(undefined);
 
   useEffect(() => {
     if (!profile) return;
@@ -99,6 +109,20 @@ export default function Watchlist() {
   }, [profile]);
 
   const version = useEnrichment(items ?? []);
+
+  useEffect(() => {
+    if (!target) return;
+    if (target.description) {
+      setDescription(target.description);
+      return;
+    }
+    let cancelled = false;
+    setDescription(undefined);
+    enrich(target).then((t) => !cancelled && setDescription(t?.overview || null));
+    return () => {
+      cancelled = true;
+    };
+  }, [target]);
 
   const view = useMemo(() => {
     void version;
@@ -158,12 +182,15 @@ export default function Watchlist() {
       );
     }
     return (
-      <div role="alert" className="mx-auto mt-16 max-w-md rounded-2xl border border-red-400/30 bg-red-950/60 p-6 text-center text-red-200">
-        <h1 className="font-display text-xl font-bold">Profile not found</h1>
-        <p className="mt-2 text-sm">
-          {profilesError ? "Your profiles could not be loaded." : `There is no profile with index “${raw}” on this account.`} Pick one from the
-          Watchlists menu.
-        </p>
+      <div className="pt-6">
+        <BackHome />
+        <div role="alert" className="mx-auto mt-10 max-w-md rounded-2xl border border-red-400/30 bg-red-950/60 p-6 text-center text-red-200">
+          <h1 className="font-display text-xl font-bold">Profile not found</h1>
+          <p className="mt-2 text-sm">
+            {profilesError ? "Your profiles could not be loaded." : `There is no profile with index “${raw}” on this account.`} Pick one from the
+            Watchlists menu.
+          </p>
+        </div>
       </div>
     );
   }
@@ -172,7 +199,10 @@ export default function Watchlist() {
 
   return (
     <div>
-      <section className="pb-6 pt-8 sm:pt-12">
+      <section className="pb-6 pt-6">
+        <div className="mb-5">
+          <BackHome />
+        </div>
         <div className="mb-5 flex flex-wrap items-baseline gap-x-3 gap-y-1">
           <h1 className="font-display text-3xl font-bold text-glow">{profile.name} Watchlist</h1>
           {items && (
@@ -225,7 +255,9 @@ export default function Watchlist() {
           busy={removing}
           onConfirm={confirmRemove}
           onCancel={() => setTarget(null)}
-        />
+        >
+          <TitleDescription text={description} />
+        </ConfirmDialog>
       )}
     </div>
   );

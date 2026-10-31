@@ -13,6 +13,9 @@ interface Props {
 }
 
 /** Modal dialog with focus trap, Esc to close, scroll lock and focus restore. */
+/** Below this, an anchored popover is too cramped, so it centers instead. */
+const MIN_ANCHORED_HEIGHT = 260;
+
 export default function Overlay({ label, onClose, anchor, children }: Props) {
   const panel = useRef<HTMLDivElement>(null);
   const onCloseRef = useRef(onClose);
@@ -60,18 +63,20 @@ export default function Overlay({ label, onClose, anchor, children }: Props) {
   const vh = typeof window === "undefined" ? 768 : window.innerHeight;
   const mobile = vw < 640;
   const width = 340;
+  const roomBelow = anchor ? vh - anchor.bottom - 16 : 0;
+  const roomAbove = anchor ? anchor.top - 16 : 0;
 
   let cls: string;
   let style: React.CSSProperties = {};
   if (mobile) {
     cls = "fixed inset-x-0 bottom-0 max-h-[85vh] rounded-t-3xl pb-4";
-  } else if (anchor) {
-    cls = "fixed max-h-[80vh] rounded-2xl";
-    style = { width, left: Math.max(8, Math.min(anchor.left, vw - width - 8)) };
-    if (anchor.bottom < vh * 0.55) style.top = anchor.bottom + 8;
+  } else if (anchor && Math.max(roomBelow, roomAbove) >= MIN_ANCHORED_HEIGHT) {
+    cls = "fixed rounded-2xl";
+    style = { width, left: Math.max(8, Math.min(anchor.left, vw - width - 8)), maxHeight: Math.max(roomBelow, roomAbove) };
+    if (roomBelow >= roomAbove) style.top = anchor.bottom + 8;
     else style.bottom = vh - anchor.top + 8;
   } else {
-    cls = "fixed left-1/2 top-1/2 w-[min(28rem,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 rounded-2xl";
+    cls = "fixed left-1/2 top-1/2 max-h-[85vh] w-[min(28rem,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 rounded-2xl";
   }
 
   return (

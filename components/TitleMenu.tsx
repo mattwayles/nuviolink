@@ -7,6 +7,7 @@ import { lookupTitle } from "@/lib/tmdb/client";
 import type { LibraryItem, Title } from "@/lib/types";
 import Overlay from "./Overlay";
 import { LockIcon, ProfileDot, useProfiles } from "./Profiles";
+import { TitleDescription } from "./TitleCard";
 import { useToast } from "./Toast";
 
 function Spinner() {
@@ -27,6 +28,7 @@ export default function TitleMenu({ title, anchor, onClose }: { title: Title; an
     lookupRef.current = p;
     p.then((t) => setResolved(t)).catch(() => {
       if (lookupRef.current === p) lookupRef.current = null;
+      setResolved(null);
     });
     return p;
   }
@@ -100,6 +102,9 @@ export default function TitleMenu({ title, anchor, onClose }: { title: Title; an
         <button type="button" aria-label="Close menu" onClick={onClose} className="rounded-full px-2 text-2xl leading-none text-white/50 hover:text-white">
           ×
         </button>
+      </div>
+      <div className="px-3 pb-3">
+        <TitleDescription text={title.overview || (resolved === undefined ? undefined : resolved?.overview || null)} />
       </div>
       <ul role="menu" className="space-y-0.5">
         {profiles?.map((p) => {
