@@ -4,15 +4,15 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { addToLibrary, getCachedLibrary, getLibrary, removeFromLibrary } from "@/lib/nuvio/client";
-import { fromNuvioType, libraryItemToRef } from "@/lib/nuvio/mapping";
+import { fromNuvioType, libraryItemToRef, matchesTitle } from "@/lib/nuvio/mapping";
 import { sortItems } from "@/lib/sort";
 import { lookupTitle } from "@/lib/tmdb/client";
-import type { LibraryItem, Title } from "@/lib/types";
-import ConfirmDialog from "./ConfirmDialog";
+import type { LibraryItem, Profile, Title } from "@/lib/types";
+import ActionMenu from "./ActionMenu";
 import { useProfiles } from "./Profiles";
 import SearchBar from "./SearchBar";
 import SortControl, { useSort } from "./SortControl";
-import TitleCard, { SkeletonGrid, TitleDescription } from "./TitleCard";
+import TitleCard, { SkeletonGrid } from "./TitleCard";
 import { useToast } from "./Toast";
 
 const keyOf = (i: LibraryItem) => `${i.content_type}:${i.content_id}`;
@@ -73,6 +73,47 @@ function BackHome() {
   );
 }
 
+function ItemMenu({
+  item,
+  profile,
+  removed,
+  onRemove,
+  anchor,
+  onClose,
+}: {
+  item: LibraryItem;
+  profile: Profile;
+  removed: boolean;
+  onRemove: () => Promise<void>;
+  anchor: DOMRect | null;
+  onClose: () => void;
+}) {
+  const [resolved, setResolved] = useState<Title | null | undefined>(undefined);
+
+  useEffect(() => {
+    let cancelled = false;
+    enrich(item).then((t) => !cancelled && setResolved(t));
+    return () => {
+      cancelled = true;
+    };
+  }, [item]);
+
+  const type = fromNuvioType(item.content_type);
+  return (
+    <ActionMenu
+      name={item.name || item.content_id}
+      meta={[item.release_info, type === "tv" ? "TV" : type === "movie" ? "Movie" : null].filter(Boolean).join(" · ")}
+      description={item.description || (resolved === undefined ? undefined : resolved?.overview || null)}
+      matches={(i) => keyOf(i) === keyOf(item) || (!!resolved && matchesTitle(i, resolved))}
+      // Copy the exact content id so the title stays one identity across profiles.
+      buildItem={async () => ({ ...item, added_at: Date.now() })}
+      removal={{ profile, removed, run: onRemove }}
+      anchor={anchor}
+      onClose={onClose}
+    />
+  );
+}
+
 export default function Watchlist() {
   const params = useParams<{ index: string }>();
   const raw = params.index;
@@ -86,9 +127,7 @@ export default function Watchlist() {
   const [attempt, setAttempt] = useState(0);
   const [filter, setFilter] = useState("");
   const [sort, setSort] = useSort("nuviolink.sort.watchlist");
-  const [target, setTarget] = useState<LibraryItem | null>(null);
-  const [removing, setRemoving] = useState(false);
-  const [description, setDescription] = useState<string | null | undefined>(undefined);
+  const [menu, setMenu] = useState<{ item: LibraryItem; anchor: DOMRect } | null>(null);
 
   useEffect(() => {
     if (!profile) return;
@@ -110,20 +149,6 @@ export default function Watchlist() {
 
   const version = useEnrichment(items ?? []);
 
-  useEffect(() => {
-    if (!target) return;
-    if (target.description) {
-      setDescription(target.description);
-      return;
-    }
-    let cancelled = false;
-    setDescription(undefined);
-    enrich(target).then((t) => !cancelled && setDescription(t?.overview || null));
-    return () => {
-      cancelled = true;
-    };
-  }, [target]);
-
   const view = useMemo(() => {
     void version;
     const rows = (items ?? []).map((item) => {
@@ -141,14 +166,11 @@ export default function Watchlist() {
     return sortItems(filtered, sort, { title: (r) => r.name, rating: (r) => r.rating });
   }, [items, filter, sort, version]);
 
-  async function confirmRemove() {
-    if (!target || !profile) return;
-    const original = target;
-    setRemoving(true);
+  async function remove(original: LibraryItem) {
+    if (!profile) return;
     try {
       await removeFromLibrary(profile.profileIndex, { content_id: original.content_id, content_type: original.content_type });
       setItems((l) => l && l.filter((i) => keyOf(i) !== keyOf(original)));
-      setTarget(null);
       const name = original.name || original.content_id;
       notify(`Removed "${name}" from ${profile.name} Watchlist`, "success", {
         durationMs: 8000,
@@ -166,10 +188,7 @@ export default function Watchlist() {
         },
       });
     } catch (e) {
-      setTarget(null);
       notify(e instanceof Error ? e.message : "Could not remove title", "error");
-    } finally {
-      setRemoving(false);
     }
   }
 
@@ -242,22 +261,21 @@ export default function Watchlist() {
               posterUrl={r.poster}
               rating={r.rating}
               badge={fromNuvioType(r.item.content_type) === "tv" ? "TV" : fromNuvioType(r.item.content_type) === "movie" ? "Movie" : null}
-              onActivate={() => setTarget(r.item)}
+              onActivate={(anchor) => setMenu({ item: r.item, anchor })}
             />
           ))}
         </div>
       )}
 
-      {target && (
-        <ConfirmDialog
-          message={`Remove "${target.name || target.content_id}" from ${profile.name} Watchlist?`}
-          confirmLabel="Remove"
-          busy={removing}
-          onConfirm={confirmRemove}
-          onCancel={() => setTarget(null)}
-        >
-          <TitleDescription text={description} />
-        </ConfirmDialog>
+      {menu && (
+        <ItemMenu
+          item={menu.item}
+          profile={profile}
+          removed={!items?.some((i) => keyOf(i) === keyOf(menu.item))}
+          onRemove={() => remove(menu.item)}
+          anchor={menu.anchor}
+          onClose={() => setMenu(null)}
+        />
       )}
     </div>
   );

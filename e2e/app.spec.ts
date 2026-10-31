@@ -265,20 +265,70 @@ test.describe("watchlists", () => {
     await expect(page.getByRole("heading", { name: "Profile not found" })).toBeVisible();
   });
 
-  test("remove asks for confirmation, shows green toast, Undo restores with original added_at", async ({ page }) => {
+  test("item menu lists other profiles plus remove for the current profile", async ({ page }) => {
+    await setup(page);
+    await page.goto("/watchlist/0");
+    await card(page, /Inception/).click();
+    const items = page.getByRole("dialog").getByRole("menuitem");
+    await expect(items).toHaveCount(4);
+    await expect(items.nth(0)).toHaveText("Add to Kids Watchlist");
+    await expect(items.nth(1)).toHaveText("Add to Sam Watchlist");
+    await expect(items.nth(2)).toHaveText("Add to Guest Watchlist");
+    await expect(items.nth(3)).toHaveText("Remove from Matt Watchlist");
+    await page.getByRole("button", { name: "Close menu" }).click();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+  });
+
+  test("item menu is anchored to the card, like the add menu", async ({ page }) => {
+    await setup(page);
+    await page.setViewportSize({ width: 1280, height: 1000 });
+    await page.goto("/");
+    await card(page, /Inception/).click();
+    const addBox = (await page.getByRole("dialog").boundingBox())!;
+    await page.keyboard.press("Escape");
+    await page.goto("/watchlist/0");
+    const cardBox = (await card(page, /Inception/).boundingBox())!;
+    await card(page, /Inception/).click();
+    const box = (await page.getByRole("dialog").boundingBox())!;
+    expect(box.width).toBe(addBox.width);
+    expect(box.x).toBe(cardBox.x);
+  });
+
+  test("adding to another profile copies the exact id, marks it, and keeps the menu open", async ({ page }) => {
+    const m = await setup(page);
+    await page.goto("/watchlist/0");
+    await card(page, /Odd Addon Show/).click();
+    await page.getByRole("menuitem", { name: "Add to Kids Watchlist" }).click();
+    await expect(page.locator('[data-tone="success"]')).toContainText('Added "Odd Addon Show" to Kids Watchlist');
+    await expect(page.getByRole("menuitem", { name: "Already in Kids Watchlist" })).toBeDisabled();
+    await expect(page.getByRole("menuitem", { name: "Remove from Matt Watchlist" })).toBeEnabled();
+    const push = m.rpc("sync_push_library_items")[0];
+    expect(push).toMatchObject({ p_profile_id: 1 });
+    expect(push.p_items[0]).toMatchObject({ content_id: "kitsu:123", content_type: "series", name: "Odd Addon Show" });
+    expect(push.p_items[0]).not.toHaveProperty("user_id");
+    expect(m.rpc("sync_delete_library_items")).toHaveLength(0);
+  });
+
+  test("a title stored under another id on a profile shows as already there", async ({ page }) => {
+    const library = {
+      0: [{ content_id: "tmdb:27205", content_type: "movie", name: "Inception", added_at: 1 }],
+      1: [{ content_id: "tt1375666", content_type: "movie", name: "Inception", added_at: 1 }],
+    };
+    await setup(page, { library });
+    await page.goto("/watchlist/0");
+    await card(page, /Inception/).click();
+    await expect(page.getByRole("menuitem", { name: "Already in Kids Watchlist" })).toBeDisabled();
+  });
+
+  test("remove keeps the menu open, removes immediately, and Undo restores the original", async ({ page }) => {
     const m = await setup(page);
     await page.goto("/watchlist/0");
     await card(page, /Breaking Bad/).click();
-    const dialog = page.getByRole("dialog");
-    await expect(dialog).toContainText('Remove "Breaking Bad" from Matt Watchlist?');
-    await dialog.getByRole("button", { name: "Close dialog" }).click();
-    await expect(dialog).toHaveCount(0);
-    expect(m.rpc("sync_delete_library_items")).toHaveLength(0);
-
-    await card(page, /Breaking Bad/).click();
-    await page.getByRole("dialog").getByRole("button", { name: "Remove" }).click();
+    await page.getByRole("menuitem", { name: "Remove from Matt Watchlist" }).click();
     await expect(page.locator('[data-tone="success"]')).toContainText('Removed "Breaking Bad" from Matt Watchlist');
     await expect(page.getByTestId("title-card")).toHaveCount(3);
+    await expect(page.getByRole("menuitem", { name: "Removed from Matt Watchlist" })).toBeDisabled();
+    await expect(page.getByRole("dialog")).toContainText("Breaking Bad overview");
     expect(m.rpc("sync_delete_library_items")[0]).toMatchObject({
       p_profile_id: 0,
       p_keys: [{ content_id: "tt0903747", content_type: "series" }],
@@ -286,19 +336,21 @@ test.describe("watchlists", () => {
 
     await page.getByRole("button", { name: "Undo" }).click();
     await expect(page.getByTestId("title-card")).toHaveCount(4);
+    await expect(page.getByRole("menuitem", { name: "Remove from Matt Watchlist" })).toBeEnabled();
     const re = m.rpc("sync_push_library_items")[0];
     expect(re.p_items[0]).toMatchObject({ content_id: "tt0903747", content_type: "series", added_at: 2000, name: "Breaking Bad" });
     expect(re.p_items[0]).not.toHaveProperty("user_id");
   });
 
-  test("remove failure shows a red toast and the item stays", async ({ page }) => {
+  test("remove failure shows a red toast and the item and menu stay", async ({ page }) => {
     const m = await setup(page);
     m.failRemove = true;
     await page.goto("/watchlist/0");
     await card(page, /Inception/).click();
-    await page.getByRole("dialog").getByRole("button", { name: "Remove" }).click();
+    await page.getByRole("menuitem", { name: "Remove from Matt Watchlist" }).click();
     await expect(page.locator('[data-tone="error"]')).toHaveText(/Boom: could not delete/);
     await expect(page.getByTestId("title-card")).toHaveCount(4);
+    await expect(page.getByRole("menuitem", { name: "Remove from Matt Watchlist" })).toBeEnabled();
   });
 });
 
@@ -326,7 +378,7 @@ test.describe("descriptions and navigation", () => {
     await expect(page.getByRole("dialog")).toContainText("Inception overview");
   });
 
-  test("remove dialog shows the stored description", async ({ page }) => {
+  test("watchlist menu shows the stored description", async ({ page }) => {
     const library = { 0: [{ content_id: "tt1375666", content_type: "movie", name: "Inception", description: "Stored synopsis", added_at: 1 }] };
     await setup(page, { library });
     await page.goto("/watchlist/0");
@@ -334,12 +386,12 @@ test.describe("descriptions and navigation", () => {
     await expect(page.getByRole("dialog")).toContainText("Stored synopsis");
   });
 
-  test("remove dialog falls back to TMDB, then to a no-description message", async ({ page }) => {
+  test("watchlist menu falls back to TMDB, then to a no-description message", async ({ page }) => {
     await setup(page);
     await page.goto("/watchlist/0");
     await card(page, /Breaking Bad/).click();
     await expect(page.getByRole("dialog")).toContainText("Breaking Bad overview");
-    await page.getByRole("dialog").getByRole("button", { name: "Close dialog" }).click();
+    await page.getByRole("button", { name: "Close menu" }).click();
     await card(page, /Odd Addon Show/).click();
     await expect(page.getByRole("dialog")).toContainText("No description available.");
   });
@@ -367,6 +419,18 @@ test.describe("descriptions and navigation", () => {
 
 test.describe("mobile 360px", () => {
   test.use({ viewport: { width: 360, height: 740 } });
+
+  test("toasts never cover the menu on a phone", async ({ page }) => {
+    await setup(page);
+    await page.goto("/watchlist/0");
+    await card(page, /Inception/).click();
+    await page.getByRole("menuitem", { name: "Remove from Matt Watchlist" }).click();
+    const toast = page.locator('[data-tone="success"]');
+    await expect(toast).toBeVisible();
+    const t = (await toast.boundingBox())!;
+    const d = (await page.getByRole("dialog").boundingBox())!;
+    expect(t.y + t.height).toBeLessThanOrEqual(d.y);
+  });
 
   test("fits three posters per row", async ({ page }) => {
     await setup(page);
