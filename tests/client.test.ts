@@ -80,6 +80,38 @@ describe("signIn / signOut", () => {
     expect(sess.getSession()?.refresh_token).toBe("ref-5");
   });
 
+  it("signIn offers the password to the browser's credential store", async () => {
+    sess.clearSession();
+    class PasswordCredential {
+      constructor(public data: { id: string; password: string }) {}
+    }
+    const store = vi.fn().mockResolvedValue(undefined);
+    vi.stubGlobal("PasswordCredential", PasswordCredential);
+    vi.stubGlobal("navigator", { credentials: { store } });
+    fetchMock.mockResolvedValueOnce(json(200, tokenBody(5)));
+    await client.signIn("a@b.c", "hunter2");
+    expect(store.mock.calls[0][0].data).toEqual({ id: "a@b.c", password: "hunter2" });
+  });
+
+  it("signIn succeeds when the browser refuses to store the credential", async () => {
+    sess.clearSession();
+    vi.stubGlobal("PasswordCredential", class {});
+    vi.stubGlobal("navigator", { credentials: { store: vi.fn().mockRejectedValue(new Error("denied")) } });
+    fetchMock.mockResolvedValueOnce(json(200, tokenBody(5)));
+    await expect(client.signIn("a@b.c", "hunter2")).resolves.toBeUndefined();
+    expect(sess.getSession()?.refresh_token).toBe("ref-5");
+  });
+
+  it("signIn does not offer the password when sign in fails", async () => {
+    sess.clearSession();
+    const store = vi.fn();
+    vi.stubGlobal("PasswordCredential", class {});
+    vi.stubGlobal("navigator", { credentials: { store } });
+    fetchMock.mockResolvedValueOnce(json(400, { msg: "Invalid login credentials" }));
+    await expect(client.signIn("a@b.c", "nope")).rejects.toThrow("Invalid login credentials");
+    expect(store).not.toHaveBeenCalled();
+  });
+
   it("signOut uses scope=local and clears local state", async () => {
     fetchMock.mockResolvedValueOnce(json(204));
     await client.signOut();

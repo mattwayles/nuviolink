@@ -12,6 +12,9 @@ export default function LoginForm() {
 
   useEffect(() => {
     document.title = "Sign in | NuvioLink";
+    // Password managers treat a form that goes away along with a URL change as a successful login.
+    history.replaceState(history.state, "", "#sign-in");
+    return () => history.replaceState(history.state, "", location.pathname + location.search);
   }, []);
 
   async function submit(e: React.FormEvent) {
@@ -46,8 +49,8 @@ export default function LoginForm() {
             required
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            disabled={busy}
-            className="w-full rounded-xl border border-white/10 bg-ink-800 px-4 py-3 text-white placeholder:text-white/30 disabled:opacity-60"
+            readOnly={busy}
+            className="w-full rounded-xl border border-white/10 bg-ink-800 px-4 py-3 text-white placeholder:text-white/30 read-only:opacity-60"
           />
         </label>
         <label className="block text-sm">
@@ -59,8 +62,8 @@ export default function LoginForm() {
             required
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            disabled={busy}
-            className="w-full rounded-xl border border-white/10 bg-ink-800 px-4 py-3 text-white disabled:opacity-60"
+            readOnly={busy}
+            className="w-full rounded-xl border border-white/10 bg-ink-800 px-4 py-3 text-white read-only:opacity-60"
           />
         </label>
         {error && (

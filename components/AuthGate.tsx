@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { onSessionChange, getSession } from "@/lib/nuvio/session";
+import { onSessionChange, getSession, requestPersistentStorage } from "@/lib/nuvio/session";
 import LoginForm from "./LoginForm";
 
 type State = "loading" | "in" | "out";
@@ -15,6 +15,11 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
     setState(getSession() ? "in" : "out");
     return onSessionChange((s) => setState(s ? "in" : "out"));
   }, []);
+
+  // Asked on every visit because browsers grant it later, e.g. once the site is installed.
+  useEffect(() => {
+    if (state === "in") requestPersistentStorage();
+  }, [state]);
 
   // Sign-in swaps a short form for a long page, so start it at the top, including once a closing keyboard settles.
   useEffect(() => {

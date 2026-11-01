@@ -35,6 +35,20 @@ export async function signIn(email: string, password: string): Promise<void> {
     body: { email, password },
   });
   saveSession(sessionFromTokenResponse(data as Parameters<typeof sessionFromTokenResponse>[0]));
+  void offerToSavePassword(email, password);
+}
+
+/** Asks the browser to show its save prompt directly (Chromium only); others rely on form detection. */
+async function offerToSavePassword(id: string, password: string): Promise<void> {
+  const { PasswordCredential } = globalThis as unknown as {
+    PasswordCredential?: new (data: { id: string; password: string }) => Credential;
+  };
+  if (!PasswordCredential) return;
+  try {
+    await navigator.credentials.store(new PasswordCredential({ id, password }));
+  } catch {
+    // best effort
+  }
 }
 
 /** scope=local is essential: the default (global) would sign the user out of every Nuvio app. */

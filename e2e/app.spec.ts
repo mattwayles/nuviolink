@@ -24,6 +24,70 @@ test.describe("auth", () => {
     expect(stored).toContain("refresh-1");
   });
 
+  test("sign in gives password managers their signals: live fields, a URL change, and the credential", async ({ page }) => {
+    await setup(page, { session: null });
+    await page.addInitScript(() => {
+      (window as any).__stored = [];
+      navigator.credentials.store = async (c: any) => ((window as any).__stored.push({ id: c.id, password: c.password }), c);
+    });
+    await page.route(/\/auth\/v1\/token/, async (route) => {
+      await new Promise((r) => setTimeout(r, 200));
+      await route.fallback();
+    });
+    await page.goto("/");
+    await expect(page).toHaveURL(/\/#sign-in$/);
+
+    await page.getByLabel("Email").fill("me@example.com");
+    await page.getByLabel("Password").fill("correct-horse");
+    await page.getByRole("button", { name: "Sign in" }).click();
+    await expect(page.getByRole("button", { name: "Signing in…" })).toBeVisible();
+    await expect(page.getByLabel("Password")).toBeEnabled();
+    await expect(page.getByLabel("Password")).not.toBeEditable();
+
+    await expect(page.getByRole("searchbox", { name: "Search movies and TV shows" })).toBeVisible();
+    await expect(page).toHaveURL(/\/$/);
+    expect(await page.evaluate(() => (window as any).__stored)).toEqual([{ id: "me@example.com", password: "correct-horse" }]);
+  });
+
+  test("a failed sign in keeps the form editable and stores nothing", async ({ page }) => {
+    await setup(page, { session: null });
+    await page.addInitScript(() => {
+      (window as any).__stored = 0;
+      navigator.credentials.store = async (c: any) => ((window as any).__stored++, c);
+    });
+    await page.goto("/");
+    await page.getByLabel("Email").fill("me@example.com");
+    await page.getByLabel("Password").fill("wrong");
+    await page.getByRole("button", { name: "Sign in" }).click();
+    await expect(page.locator("form").getByRole("alert")).toBeVisible();
+    await expect(page.getByLabel("Password")).toBeEditable();
+    await expect(page).toHaveURL(/#sign-in$/);
+    expect(await page.evaluate(() => (window as any).__stored)).toBe(0);
+  });
+
+  test("a CDN error on refresh does not sign the user out", async ({ page }) => {
+    await setup(page, { session: freshSession({ access_token: "stale", expires_at: 1 }) });
+    await page.route(/\/auth\/v1\/token/, (route) =>
+      route.fulfill({ status: 403, headers: { "access-control-allow-origin": "*" }, body: "<html>Forbidden</html>" }),
+    );
+    await page.goto("/");
+    await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+    await expect(page.getByLabel("Password")).toHaveCount(0);
+    const s = await page.evaluate(() => JSON.parse(localStorage.getItem("nuviolink.session")!));
+    expect(s.refresh_token).toBe("refresh-1");
+  });
+
+  test("the app asks the browser to keep its storage once signed in", async ({ page }) => {
+    await setup(page);
+    await page.addInitScript(() => {
+      (window as any).__persisted = 0;
+      navigator.storage.persist = async () => ((window as any).__persisted++, true);
+    });
+    await page.goto("/");
+    await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+    expect(await page.evaluate(() => (window as any).__persisted)).toBeGreaterThan(0);
+  });
+
   test("stored session never flashes the login form", async ({ page }) => {
     await setup(page);
     await page.addInitScript(() => {

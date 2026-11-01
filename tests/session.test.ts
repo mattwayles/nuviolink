@@ -107,6 +107,19 @@ describe("getAccessToken", () => {
     expect(s.getSession()).toBeNull();
   });
 
+  it.each([
+    ["a CDN block page", 403, "<html>Forbidden</html>"],
+    ["a gateway API key rejection", 401, JSON.stringify({ message: "Invalid API key" })],
+  ])("keeps the session on %s", async (_n, status, body) => {
+    const s = await load();
+    s.saveSession(session({ expires_at: NOW_S + 10 }));
+    fetchMock.mockResolvedValueOnce(new Response(body, { status }));
+    const err = await s.getAccessToken().then(() => null, (e) => e);
+    expect(err.status).toBe(status);
+    expect(err.sessionExpired).toBe(false);
+    expect(stored(env).refresh_token).toBe("ref-1");
+  });
+
   it("never puts tokens in error messages", async () => {
     const s = await load();
     s.saveSession(session({ expires_at: NOW_S + 10 }));
@@ -114,6 +127,21 @@ describe("getAccessToken", () => {
     const err = await s.getAccessToken().then(() => null, (e) => e);
     expect(err.message).not.toContain("ref-1");
     expect(err.message).not.toContain("acc-1");
+  });
+});
+
+describe("requestPersistentStorage", () => {
+  it("asks the browser to keep storage and ignores a failure", async () => {
+    const s = await load();
+    const persist = vi.fn().mockRejectedValue(new Error("nope"));
+    vi.stubGlobal("navigator", { storage: { persist } });
+    s.requestPersistentStorage();
+    expect(persist).toHaveBeenCalledTimes(1);
+  });
+
+  it("does nothing where the Storage API is missing", async () => {
+    const s = await load();
+    expect(() => s.requestPersistentStorage()).not.toThrow();
   });
 });
 

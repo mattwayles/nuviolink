@@ -15,16 +15,19 @@ export class NuvioError extends Error {
   sessionExpired: boolean;
   /** True for network errors, timeouts, 429 and 5xx: safe to retry, session kept. */
   retryable: boolean;
+  /** True when the error body came from the auth server rather than a gateway or proxy in front of it. */
+  fromAuthServer: boolean;
   constructor(
     message: string,
     status: number,
-    opts: { sessionExpired?: boolean; retryable?: boolean } = {},
+    opts: { sessionExpired?: boolean; retryable?: boolean; fromAuthServer?: boolean } = {},
   ) {
     super(message);
     this.name = "NuvioError";
     this.status = status;
     this.sessionExpired = opts.sessionExpired ?? false;
     this.retryable = opts.retryable ?? false;
+    this.fromAuthServer = opts.fromAuthServer ?? false;
   }
 }
 
@@ -50,6 +53,11 @@ function isSession(v: unknown): v is Session {
     !!s.user &&
     typeof s.user === "object"
   );
+}
+
+/** Best effort: asks the browser not to evict localStorage, and with it the session. */
+export function requestPersistentStorage(): void {
+  navigator.storage?.persist?.().catch(() => undefined);
 }
 
 export function getSession(): Session | null {
@@ -113,6 +121,12 @@ function messageFrom(body: unknown, status: number): string {
   return `Request failed (${status})`;
 }
 
+function isAuthServerBody(body: unknown): boolean {
+  if (!body || typeof body !== "object") return false;
+  const b = body as Record<string, unknown>;
+  return ["error_code", "error_description", "msg"].some((k) => typeof b[k] === "string");
+}
+
 export interface NuvioRequest {
   method?: string;
   body?: unknown;
@@ -159,6 +173,7 @@ export async function nuvioFetch<T = unknown>(path: string, req: NuvioRequest = 
   if (!res.ok) {
     throw new NuvioError(messageFrom(parsed, res.status), res.status, {
       retryable: res.status === 429 || res.status >= 500,
+      fromAuthServer: isAuthServerBody(parsed),
     });
   }
   return parsed as T;
@@ -226,13 +241,14 @@ async function doRefresh(failedToken: string | undefined): Promise<Session> {
         body: { refresh_token: current.refresh_token },
       });
     } catch (e) {
-      if (e instanceof NuvioError && (e.status === 400 || e.status === 401 || e.status === 403)) {
+      // Only the auth server can say a token is dead; a CDN block or bad API key says nothing about it.
+      if (e instanceof NuvioError && e.fromAuthServer && (e.status === 400 || e.status === 401 || e.status === 403)) {
         clearSession();
         throw new NuvioError("Your session has expired. Please sign in again.", e.status, {
           sessionExpired: true,
         });
       }
-      // Network error, timeout, 429, 5xx: keep the session and the refresh token.
+      // Network error, timeout, 429, 5xx, gateway rejection: keep the session and the refresh token.
       throw e;
     }
     const next = sessionFromTokenResponse(data, current.user);
